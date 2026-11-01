@@ -57,7 +57,7 @@ android {
   buildTypes {
     debug {
       applicationIdSuffix = ".debug"
-      resValue("string", "app_name", "hakuX Debug")
+      resValue("string", "app_name", "hakuX Mali")
       ndk {
         debugSymbolLevel = "NONE"
       }
