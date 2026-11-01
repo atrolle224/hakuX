@@ -264,6 +264,20 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /* Reads take a quarter of the console's drives' time, their thread
      * waiting (the game's other threads run meanwhile, as on the console). */
     args += "devtime=${if (settings.consoleTiming) 1 else 0}"
+    /* Mali tweaks (Settings → Mali tweaks): quirks on top of the driver's
+     * defaults, and the texture decoder's helper threads. Mali GPUs only:
+     * elsewhere these quirks would undo another driver's workarounds. */
+    if (File("/dev/mali0").exists()) {
+      val p = AppPrefs(this)
+      val q = listOf(
+        if (p.maliTex565) "+dxt1_565" else "-dxt1_565",
+        if (p.maliNoPresentWait) "-present_cpu_wait" else "+present_cpu_wait",
+        if (p.maliCoherentReadback) "+land_coherent" else "-land_coherent",
+        if (p.maliNoWbuf) "+no_wbuf" else "",
+      ).filter { it.isNotEmpty() }
+      args += "quirks=${q.joinToString(",")}"
+      if (!p.maliTexThreads) args += "dxtworkers=0"
+    }
     /* The console's network (native/net): system link with the consoles on
      * this network (their broadcasts reach it under the multicast lock), or
      * through an XLink Kai engine; the Internet through NAT, Insignia's DNS

@@ -89,6 +89,8 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
+          # gradle.properties names the developer's own JDK; the runner's is JAVA_HOME
+          sed -i '/^org.gradle.java.home/d' gradle.properties
           ./gradlew --no-daemon assembleDebug
 
       - uses: actions/upload-artifact@v4

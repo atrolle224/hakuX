@@ -53,6 +53,7 @@ add_library(hakux_hle STATIC
   ${NC_HLE}/shader/glsl_compile.c
   ${NC_HLE}/shader/psh.c
   ${NC_HLE}/shader/vsh.c
+  ${NC_HLE}/tex/dxt.c
   ${NC_HLE}/tex/xdk_res.c
   ${NC_HLE}/tex/xg_swizzle.c
   ${NC_HLE}/uma/uma.c

@@ -7,6 +7,7 @@
 #include "hw/xbox/hle/hle.h"
 #include "hw/xbox/hle/mem/guestmem.h"
 #include "hw/xbox/hle/uma/uma.h"
+#include "hw/xbox/hle/vk/quirks.h"
 #include "hw/xbox/hle/vk/guest_ram.h"
 
 HleVkGuestRam g_hram;
@@ -139,6 +140,13 @@ int hle_vk_land_init(uint32_t size)
                                VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
     int mt = hle_vk_memtype(req.memoryTypeBits, hc | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
     g_hland_coherent = mt >= 0;
+    if (mt < 0 && hle_quirk(HLE_QUIRK_LAND_COHERENT)) {
+        /* no cached coherent type: uncached coherent memory rather than a
+         * cache invalidation per read (quirks.h land_coherent) */
+        mt = hle_vk_memtype(req.memoryTypeBits,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+        g_hland_coherent = mt >= 0;
+    }
     if (mt < 0) {
         mt = hle_vk_memtype(req.memoryTypeBits, hc, 0);
     }

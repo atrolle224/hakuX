@@ -557,4 +557,16 @@
   <string name="xinput_ls_y">Left stick, vertical</string>
   <string name="xinput_rs_x">Right stick, horizontal</string>
   <string name="xinput_rs_y">Right stick, vertical</string>
+  <string name="settings_section_mali">Mali tweaks</string>
+  <string name="settings_mali_desc">Test switches for this build\'s Mali changes. Turn one off to compare: if a game looks wrong or runs worse with a switch on, note which one.</string>
+  <string name="settings_mali_tex565">16-bit opaque textures</string>
+  <string name="settings_mali_tex565_desc">Opaque DXT1 textures are unpacked at half the size, so the GPU reads half the memory. Colours in smooth gradients can band very slightly.</string>
+  <string name="settings_mali_threads">Texture unpacking threads</string>
+  <string name="settings_mali_threads_desc">Large textures are unpacked on several CPU cores at once, for less stutter when a game loads them.</string>
+  <string name="settings_mali_present">Skip the present wait</string>
+  <string name="settings_mali_present_desc">Hands each frame to the screen without waiting for the GPU first. A workaround for Snapdragon drivers that only costs time on Mali.</string>
+  <string name="settings_mali_readback">Coherent readback memory</string>
+  <string name="settings_mali_readback_desc">Reads what the GPU drew back into the Xbox\'s memory without a cache flush per read (Dolphin\'s Mali fix).</string>
+  <string name="settings_mali_wbuf">Ordinary depth for W-buffered games</string>
+  <string name="settings_mali_wbuf_desc">Faster in games that use W-buffering, but their depth can be wrong: objects may show through others. Off by default.</string>
 </resources>

@@ -95,6 +95,33 @@ class AppPrefs(context: Context) {
     get() = sp.getString(NativeCoreActivity.PREF_ASPECT, NativeCoreActivity.ASPECT_AUTO) ?: NativeCoreActivity.ASPECT_AUTO
     set(value) = sp.edit { putString(NativeCoreActivity.PREF_ASPECT, value) }
 
+  // Mali tweaks (this fork's test build): what the native core's Mali
+  // changes do, each switchable for A/B (read at game start; Mali GPUs only).
+  /** Opaque DXT1 textures decoded to 16-bit R5G6B5 instead of 32-bit (quirk dxt1_565). */
+  var maliTex565: Boolean
+    get() = sp.getBoolean("mali_tex565", true)
+    set(value) = sp.edit { putBoolean("mali_tex565", value) }
+
+  /** Texture decoding shared with helper threads (dxtworkers). */
+  var maliTexThreads: Boolean
+    get() = sp.getBoolean("mali_tex_threads", true)
+    set(value) = sp.edit { putBoolean("mali_tex_threads", value) }
+
+  /** No CPU wait for the frame before presenting it (quirk present_cpu_wait off). */
+  var maliNoPresentWait: Boolean
+    get() = sp.getBoolean("mali_no_present_wait", true)
+    set(value) = sp.edit { putBoolean("mali_no_present_wait", value) }
+
+  /** Readback through coherent memory (quirk land_coherent). */
+  var maliCoherentReadback: Boolean
+    get() = sp.getBoolean("mali_coherent_readback", true)
+    set(value) = sp.edit { putBoolean("mali_coherent_readback", value) }
+
+  /** W-buffered draws use ordinary depth (quirk no_wbuf): faster, depth can be off in some games. */
+  var maliNoWbuf: Boolean
+    get() = sp.getBoolean("mali_no_wbuf", false)
+    set(value) = sp.edit { putBoolean("mali_no_wbuf", value) }
+
   /** FXAA over each frame before it's scaled to the screen (read at game start). */
   var fxaa: Boolean
     get() = sp.getBoolean(NativeCoreActivity.PREF_FXAA, false)

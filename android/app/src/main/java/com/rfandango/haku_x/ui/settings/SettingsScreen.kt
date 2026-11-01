@@ -89,6 +89,12 @@ fun SettingsScreen(
   var scale by remember { mutableIntStateOf(prefs.renderScale) }
   var aspect by remember { mutableStateOf(prefs.aspectRatio) }
   var fxaa by remember { mutableStateOf(prefs.fxaa) }
+  var maliTex565 by remember { mutableStateOf(prefs.maliTex565) }
+  var maliTexThreads by remember { mutableStateOf(prefs.maliTexThreads) }
+  var maliNoPresentWait by remember { mutableStateOf(prefs.maliNoPresentWait) }
+  var maliCoherentReadback by remember { mutableStateOf(prefs.maliCoherentReadback) }
+  var maliNoWbuf by remember { mutableStateOf(prefs.maliNoWbuf) }
+  val isMali = remember { java.io.File("/dev/mali0").exists() }
   var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
   var upscaleDialog by remember { mutableStateOf(false) }
   var format by remember { mutableStateOf(prefs.screenFormat) }
@@ -338,6 +344,42 @@ fun SettingsScreen(
         supportingContent = { Text(driver) },
         modifier = Modifier.clickable(enabled = customDrivers, onClick = onGpuDriver),
       )
+
+      if (isMali) {
+        Section(stringResource(R.string.settings_section_mali))
+        Hint(stringResource(R.string.settings_mali_desc))
+        val next = " " + stringResource(R.string.settings_applies_next_start)
+        SwitchItem(
+          title = stringResource(R.string.settings_mali_tex565),
+          summary = stringResource(R.string.settings_mali_tex565_desc) + next,
+          checked = maliTex565,
+          onChange = { maliTex565 = it; prefs.maliTex565 = it },
+        )
+        SwitchItem(
+          title = stringResource(R.string.settings_mali_threads),
+          summary = stringResource(R.string.settings_mali_threads_desc) + next,
+          checked = maliTexThreads,
+          onChange = { maliTexThreads = it; prefs.maliTexThreads = it },
+        )
+        SwitchItem(
+          title = stringResource(R.string.settings_mali_present),
+          summary = stringResource(R.string.settings_mali_present_desc) + next,
+          checked = maliNoPresentWait,
+          onChange = { maliNoPresentWait = it; prefs.maliNoPresentWait = it },
+        )
+        SwitchItem(
+          title = stringResource(R.string.settings_mali_readback),
+          summary = stringResource(R.string.settings_mali_readback_desc) + next,
+          checked = maliCoherentReadback,
+          onChange = { maliCoherentReadback = it; prefs.maliCoherentReadback = it },
+        )
+        SwitchItem(
+          title = stringResource(R.string.settings_mali_wbuf),
+          summary = stringResource(R.string.settings_mali_wbuf_desc) + next,
+          checked = maliNoWbuf,
+          onChange = { maliNoWbuf = it; prefs.maliNoWbuf = it },
+        )
+      }
 
       Section(stringResource(R.string.settings_section_updates))
       ListItem(

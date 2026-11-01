@@ -122,11 +122,14 @@ static bool mali_g52_arm(const HleDriver *d)
  * the queue's lock for 3-6 ms while it waits; the Mali-G52's (Arm's r34p0,
  * Vulkan 1.1, 2026-10-30) returns at once, so the wait only cost there: the
  * presenter spent 620-730 ms/s waiting for its passes, without it 0.3 ms/s,
- * the picture the same (Sega GT 2002, Beyond Good & Evil). Arm's other GPUs
- * and releases are untested, so they keep it. */
+ * the picture the same (Sega GT 2002, Beyond Good & Evil). Off on the
+ * Mali-G615 under Arm's driver too, untested here: ARMSX2 measured its
+ * r44p1 (Anbernic RG 477V) stalling for seconds in a present that spins on
+ * the GPU and turned that off (GSDeviceVK.cpp). +present_cpu_wait puts it
+ * back. Arm's other GPUs and releases keep it. */
 static bool not_turnip_not_g52_arm(const HleDriver *d)
 {
-    return !mesa_turnip(d) && !mali_g52_arm(d);
+    return !mesa_turnip(d) && !mali_g52_arm(d) && !mali_g615_blob(d);
 }
 
 /* Timestamp queries that never resolve: ARMSX2's Mali-G615, and the G52's
@@ -136,6 +139,12 @@ static bool not_turnip_not_g52_arm(const HleDriver *d)
 static bool no_timestamps_on(const HleDriver *d)
 {
     return mali_g615_blob(d) || mali_g52_arm(d);
+}
+
+/* Mali hardware without BC: the textures are decoded on the CPU (dxt1_565) */
+static bool mali_any(const HleDriver *d)
+{
+    return mali(d);
 }
 
 /* Seen on (driver, version, what showed it). */
@@ -210,6 +219,12 @@ static const HleQuirk k_quirks[] = {
      * releases between are untested, so on for Arm's driver before r40;
      * HAKUX_HLE_QUIRKS=+no_sem_wait tries it elsewhere. */
     { HLE_QUIRK_NO_SEM_WAIT, "no_sem_wait", arm_before_r40 },
+    /* Not measured on a device yet (a Mali test build, 2026-11-01): opaque
+     * DXT1 as R5G6B5 where the GPU has no BC; -dxt1_565 for A8R8G8B8 as before */
+    { HLE_QUIRK_DXT1_565, "dxt1_565", mali_any },
+    /* Dolphin (DriverDetails.cpp, VideoBackends/Vulkan/StagingBuffer.cpp):
+     * Arm's driver, readback buffers coherent; not measured here yet */
+    { HLE_QUIRK_LAND_COHERENT, "land_coherent", arm_blob },
 };
 
 static uint32_t g_defaults;

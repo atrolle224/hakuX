@@ -9,10 +9,12 @@
 #include "hw/xbox/hle/mem/barrier.h"
 #include "hw/xbox/hle/mem/guestmem.h"
 #include "hw/xbox/hle/pb/pbres.h"
+#include "hw/xbox/hle/tex/dxt.h"
 #include "hw/xbox/hle/tex/xdk_res.h"
 #include "hw/xbox/hle/tex/xg_swizzle.h"
 #include "hw/xbox/hle/vk/back.h"
 #include "hw/xbox/hle/vk/guest_ram.h"
+#include "hw/xbox/hle/vk/quirks.h"
 
 /* ---- arena ------------------------------------------------------------------- */
 
@@ -299,11 +301,17 @@ static bool tex_define(uint32_t id, const uint32_t h5[5], const HleResDesc *dp,
      * blocks in groups of four slices), depth halving per level */
     bool vol = d.kind == HLE_RK_VOLUME;
     bool dxtd = (fi->flags & HLE_FI_DXT) && (vol || !g_hvk.caps.bc);
+    /* An opaque DXT1 texture decoded to R5G6B5 instead (quirk dxt1_565):
+     * half the memory and sampling bandwidth of A8R8G8B8. Opaque is read
+     * from every block of the resource, padding included, so a texture
+     * that could have a transparent texel stays A8R8G8B8. */
+    bool d565 = dxtd && !vol && d.fmt == HLE_XFMT_DXT1 && hle_quirk(HLE_QUIRK_DXT1_565) &&
+                hle_dxt1_opaque(src, ri.bytes / 8);
     /* A4R4G4B4 on a GPU without the 4444 formats: A8R8G8B8 as well (expand_4444),
      * a linear texture a linear one */
     bool x4444 = (d.fmt == HLE_XFMT_A4R4G4B4 || d.fmt == HLE_XFMT_LIN_A4R4G4B4) &&
                  !g_hvk.caps.x4444;
-    uint32_t oxfmt = p8 || dxtd ? HLE_XFMT_A8R8G8B8 :
+    uint32_t oxfmt = d565 ? HLE_XFMT_R5G6B5 : p8 || dxtd ? HLE_XFMT_A8R8G8B8 :
                      x4444 ? (d.fmt == HLE_XFMT_LIN_A4R4G4B4 ? HLE_XFMT_LIN_A8R8G8B8
                                                             : HLE_XFMT_A8R8G8B8) : d.fmt;
     const HleFmtInfo *ofi = hle_fmt_info(oxfmt);
@@ -340,8 +348,12 @@ static bool tex_define(uint32_t id, const uint32_t h5[5], const HleResDesc *dp,
                 orow = w * 2;
                 out = t16 = g_malloc((size_t)orow * h * dd);
             }
-            if (dxtd && !vol) {
-                dxt_volume(d.fmt, s, w, h, 1, (uint32_t *)(dst + pos));
+            if (d565) {
+                hle_dxt1_decode_565(s, w, h, (uint16_t *)(dst + pos));
+            } else if (dxtd && !vol) {
+                hle_dxt_decode_argb(d.fmt == HLE_XFMT_DXT1 ? HLE_DXT1 :
+                                    d.fmt == HLE_XFMT_DXT3 ? HLE_DXT3 : HLE_DXT5,
+                                    s, w, h, (uint32_t *)(dst + pos));
             } else if (vol) {
                 if (dxtd) {
                     dxt_volume(d.fmt, s, w, h, dd, (uint32_t *)(dst + pos));

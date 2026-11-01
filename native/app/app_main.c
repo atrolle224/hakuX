@@ -571,6 +571,17 @@ EXPORT int SDL_main(int argc, char *argv[])
         if (!strncmp(argv[i], "fxaa=", 5)) {
             nc_present_set_fxaa(atoi(argv[i] + 5) != 0);
         }
+        /* quirks=: the Vulkan driver quirks on top of the driver's defaults
+         * (hw/xbox/hle/vk/quirks.h), read when the device is made;
+         * dxtworkers=: the DXT decoder's helper threads (hw/xbox/hle/tex/dxt.c).
+         * The app's Mali tweaks. */
+        if (!strncmp(argv[i], "quirks=", 7) && argv[i][7]) {
+            setenv("HAKUX_HLE_QUIRKS", argv[i] + 7, 1);
+            nc_log("hakuX-app", "quirks %s", argv[i] + 7);
+        }
+        if (!strncmp(argv[i], "dxtworkers=", 11)) {
+            setenv("HAKUX_DXT_WORKERS", argv[i] + 11, 1);
+        }
         if (!strncmp(argv[i], "upscale=", 8)) {
             nc_present_set_upscale(!strcmp(argv[i] + 8, "sgsr") ? NC_UPSCALE_SGSR : NC_UPSCALE_BILINEAR);
         }

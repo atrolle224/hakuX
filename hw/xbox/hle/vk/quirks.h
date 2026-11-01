@@ -96,6 +96,19 @@ enum {
      * Arm's driver before r40, whose r34p0 lost the device this way on a
      * Mali-G52 (mid-game, across titles) and on a Mali-G57 (JSRF). */
     HLE_QUIRK_NO_SEM_WAIT = 1u << 14,
+    /* Not a driver bug, a cost: on a GPU without BC every DXT texture is
+     * decoded to A8R8G8B8 (pb/pbres.c), four or eight times its size. An
+     * opaque DXT1 one goes to R5G6B5 instead, half that, its interpolated
+     * colours rounded to the nearest 5/6/5 value (tex/dxt.c). On for Mali,
+     * which samples them through its memory bandwidth; read per upload. */
+    HLE_QUIRK_DXT1_565 = 1u << 15,
+    /* Cached, non-coherent host memory read back slowly: each read's
+     * vkInvalidateMappedMemoryRanges is a kernel cache maintenance call over
+     * the range (Dolphin's BUG_SLOW_CACHED_READBACK_MEMORY, Arm's driver:
+     * "high CPU usage in __pi___inval_cache_range"). The landing buffer
+     * (vk/timeline.c) takes coherent memory instead where no type is both
+     * cached and coherent. Read once, when the buffer is made. */
+    HLE_QUIRK_LAND_COHERENT = 1u << 16,
 };
 
 extern uint32_t g_hle_quirks;
