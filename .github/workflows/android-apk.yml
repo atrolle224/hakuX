@@ -47,8 +47,9 @@ jobs:
           tag https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git v3.3.0 "$D/vma"
           tag https://github.com/libsdl-org/SDL.git release-3.4.18 "$D/SDL3"
           rev https://github.com/xemu-project/nv2a_vsh_cpu.git 561fe80da57a881f89000256b459440c0178a7ce "$D/root/subprojects/nv2a_vsh_cpu"
-          tag https://gitlab.freedesktop.org/slirp/libslirp.git v4.7.0 "$D/libslirp"
-          case "$(git -C "$D/libslirp" rev-parse HEAD)" in 26be815b*) ;; *) echo "libslirp v4.7.0 is not 26be815b" >&2; exit 1;; esac
+          # libslirp 4.7.0 at 26be815b (android/README.md): a short ID, so the full history
+          git clone -q https://gitlab.freedesktop.org/slirp/libslirp.git "$D/libslirp"
+          git -C "$D/libslirp" checkout -q 26be815b
           git clone -q https://github.com/bylaws/libadrenotools.git "$D/adrenotools"
           git -C "$D/adrenotools" checkout -q 8fae8ce254dfc1344527e05301e43f37dea2df80
           git -C "$D/adrenotools" submodule update --init --recursive --depth 1
