@@ -5,6 +5,7 @@
 #include "hw/xbox/hle/base.h"
 #include "hw/xbox/hle/hle.h"
 #include "hw/xbox/hle/hitch.h"
+#include "hw/xbox/hle/cpuplace.h"
 #include "hw/xbox/hle/mem/barrier.h"
 #include "hw/xbox/hle/mem/guestmem.h"
 #include "hw/xbox/hle/pb/kelvin.h"
@@ -1480,6 +1481,7 @@ void hle_pb_state_set(const HlePbState *s)
 static void *decode_thread(void *opaque)
 {
     hle_hitch_thread(HLE_HT_DECODE);    /* the stutter / hang monitor's (hitch.h) */
+    hle_cpu_thread(HLE_CPU_DECODE);     /* the fast cores (cpuplace.h) */
     t_decoder = true;
     while (!g_pb.stop) {
         /* asleep until a kick: waiting for the guest, the flip it stalls on
@@ -1522,6 +1524,7 @@ void hle_pb_kick(void)
 
 void hle_pb_put(void)
 {
+    hle_cpu_thread(HLE_CPU_VCPU);       /* the fast cores (cpuplace.h), once */
     if (t_hitch < 0 && g_hitch_on) {
         hle_hitch_thread(HLE_HT_VCPU);  /* the vCPU's CPU time for the monitor */
     }

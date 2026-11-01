@@ -278,6 +278,9 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       args += "quirks=${q.joinToString(",")}"
       if (!p.maliTexThreads) args += "dxtworkers=0"
     }
+    /* The guest CPU, decoder and render threads on the fast cores, with
+     * Android's performance hints (hw/xbox/hle/cpuplace.c). */
+    if (!AppPrefs(this).fastCores) args += "bigcores=0"
     /* The console's network (native/net): system link with the consoles on
      * this network (their broadcasts reach it under the multicast lock), or
      * through an XLink Kai engine; the Internet through NAT, Insignia's DNS
@@ -406,6 +409,82 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     }
   }
 
+  /*
+   * Stability (Settings → Stability): automatic savestates every few minutes,
+   * in two slots in turn, taken only while the game runs smoothly (no hang
+   * now or in the last 30 s, no menu open); and when the game has been stuck
+   * on one frame for a while, a prompt to keep waiting, load the newest
+   * savestate or quit, so a freeze costs the time since the last save
+   * instead of the session.
+   */
+  private var autosaveMs = 0L
+  private var hangRecovery = true
+  private var lastAutosave = 0L
+  private var autosaving = false
+  private var hangPromptAt = HANG_PROMPT_S
+  private var hangDialog: AlertDialog? = null
+
+  private val stabilityRunnable = object : Runnable {
+    override fun run() {
+      val st = nativeGetHangStatus()
+      val hang = st?.getOrNull(0) ?: 0f
+      val since = st?.getOrNull(1) ?: -1f
+      if (hang == 0f) hangPromptAt = HANG_PROMPT_S
+      if (hangRecovery && hang >= hangPromptAt && hangDialog == null && !relaunchStarted) {
+        showHangPrompt(hang)
+      }
+      val now = SystemClock.uptimeMillis()
+      if (lastAutosave == 0L) lastAutosave = now
+      if (autosaveMs > 0 && !autosaving && now - lastAutosave >= autosaveMs && !activityPaused &&
+        menuDialogs == 0 && hang == 0f && (since < 0f || since > AUTOSAVE_CALM_S) && !relaunchStarted &&
+        nativeStatesAvailable()
+      ) {
+        autosaving = true
+        Log.i(TAG, "autosave")
+        saveStates.autosave { ok ->
+          autosaving = false
+          lastAutosave = SystemClock.uptimeMillis()
+          if (ok) Toast.makeText(this@NativeCoreActivity, R.string.autosave_done, Toast.LENGTH_SHORT).show()
+        }
+      }
+      fpsHandler.postDelayed(this, STABILITY_POLL_MS)
+    }
+  }
+
+  /** The game stuck on one frame for `seconds`: keep waiting, load the newest savestate, or quit. */
+  private fun showHangPrompt(seconds: Float) {
+    Log.w(TAG, "hang prompt: stuck for %.0f s".format(seconds))
+    val newest = if (nativeStatesAvailable()) saveStates.newest() else null
+    val b = AlertDialog.Builder(this)
+      .setTitle(R.string.hang_title)
+      .setMessage(
+        getString(R.string.hang_message, seconds.toInt()) +
+          (newest?.let {
+            val f = saveStates.state(it)
+            "\n\n" + getString(
+              R.string.hang_newest,
+              java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(f.lastModified())),
+            )
+          } ?: "")
+      )
+      .setPositiveButton(R.string.hang_wait) { _, _ -> hangPromptAt = seconds + HANG_REPROMPT_S }
+      .setNegativeButton(if (launchedExternally) R.string.overlay_menu_exit_frontend else R.string.overlay_menu_exit) { _, _ ->
+        exitGame()
+      }
+    if (newest != null) {
+      b.setNeutralButton(R.string.hang_load) { _, _ -> saveStates.load(newest) }
+    }
+    b.setCancelable(false)
+    val d = showMenuDialog(b)
+    hangDialog = d
+    d.setOnDismissListener {
+      menuDialogs--
+      syncPause()
+      hangDialog = null
+      if (hangPromptAt <= seconds) hangPromptAt = seconds + HANG_REPROMPT_S
+    }
+  }
+
   /** The frame on screen, copied from the game's surface (null: it couldn't be). */
   private fun captureFrame(done: (Bitmap?) -> Unit) {
     val surface = mSurface
@@ -461,6 +540,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     if (!fatalShown) {
       fpsHandler.postDelayed(fatalRunnable, FPS_INTERVAL_MS)
     }
+    AppPrefs(this).let {
+      autosaveMs = it.autosaveMinutes * 60_000L
+      hangRecovery = it.hangRecovery
+    }
+    fpsHandler.removeCallbacks(stabilityRunnable)
+    fpsHandler.postDelayed(stabilityRunnable, STABILITY_POLL_MS)
     fpsHandler.removeCallbacks(stateRequestRunnable)
     if (BuildConfig.DEBUG) {
       fpsHandler.postDelayed(stateRequestRunnable, STATE_POLL_MS)
@@ -496,6 +581,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   }
 
   override fun onPause() {
+    fpsHandler.removeCallbacks(stabilityRunnable)
     fpsHandler.removeCallbacks(fpsRunnable)
     fpsHandler.removeCallbacks(fatalRunnable)
     fpsHandler.removeCallbacks(rumbleRunnable)
@@ -506,6 +592,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   }
 
   override fun onDestroy() {
+    fpsHandler.removeCallbacks(stabilityRunnable)
     fpsHandler.removeCallbacks(fpsRunnable)
     fpsHandler.removeCallbacks(fatalRunnable)
     fpsHandler.removeCallbacks(rumbleRunnable)
@@ -1149,6 +1236,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** The FPS and stutter lines' update held back (OverlayPacer): tried again this soon. */
     private const val LINES_RETRY_MS = 50L
     private const val STATE_POLL_MS = 500L
+    private const val STABILITY_POLL_MS = 1000L
+    /** Seconds on one frame before the hang prompt, and before it comes back after Keep waiting. */
+    private const val HANG_PROMPT_S = 20f
+    private const val HANG_REPROMPT_S = 40f
+    /** An autosave waits this long after a hang ends. */
+    private const val AUTOSAVE_CALM_S = 30f
     private const val RUMBLE_INTERVAL_MS = 50L
     /** The relaunch's frame copy: how long it may take before the restart goes on without it. */
     private const val RELAUNCH_COPY_MS = 1000L
@@ -1210,6 +1303,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** The HLE GPU's stutter and hang monitor lines ("": nothing to show). */
     @JvmStatic
     external fun nativeGetHleHitches(): String
+
+    /** {seconds stuck on one frame (0: not), seconds since the last hang ended (-1: none)}. */
+    @JvmStatic
+    external fun nativeGetHangStatus(): FloatArray?
 
     /** How long the GPU has been on the game's work without running out of it, in ms (0: out now). */
     @JvmStatic

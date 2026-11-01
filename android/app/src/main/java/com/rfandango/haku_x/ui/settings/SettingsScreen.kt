@@ -95,6 +95,10 @@ fun SettingsScreen(
   var maliCoherentReadback by remember { mutableStateOf(prefs.maliCoherentReadback) }
   var maliNoWbuf by remember { mutableStateOf(prefs.maliNoWbuf) }
   val isMali = remember { java.io.File("/dev/mali0").exists() }
+  var fastCores by remember { mutableStateOf(prefs.fastCores) }
+  var autosaveMinutes by remember { mutableStateOf(prefs.autosaveMinutes) }
+  var autosaveDialog by remember { mutableStateOf(false) }
+  var hangRecovery by remember { mutableStateOf(prefs.hangRecovery) }
   var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
   var upscaleDialog by remember { mutableStateOf(false) }
   var format by remember { mutableStateOf(prefs.screenFormat) }
@@ -345,6 +349,30 @@ fun SettingsScreen(
         modifier = Modifier.clickable(enabled = customDrivers, onClick = onGpuDriver),
       )
 
+      Section(stringResource(R.string.settings_section_stability))
+      SwitchItem(
+        title = stringResource(R.string.settings_fast_cores),
+        summary = stringResource(R.string.settings_fast_cores_desc) + " " + stringResource(R.string.settings_applies_next_start),
+        checked = fastCores,
+        onChange = { fastCores = it; prefs.fastCores = it },
+      )
+      ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_autosave)) },
+        supportingContent = {
+          Text(
+            (if (autosaveMinutes > 0) stringResource(R.string.settings_autosave_every, autosaveMinutes)
+            else stringResource(R.string.settings_autosave_off)) + ". " + stringResource(R.string.settings_autosave_desc)
+          )
+        },
+        modifier = Modifier.clickable { autosaveDialog = true },
+      )
+      SwitchItem(
+        title = stringResource(R.string.settings_hang_recovery),
+        summary = stringResource(R.string.settings_hang_recovery_desc),
+        checked = hangRecovery,
+        onChange = { hangRecovery = it; prefs.hangRecovery = it },
+      )
+
       if (isMali) {
         Section(stringResource(R.string.settings_section_mali))
         Hint(stringResource(R.string.settings_mali_desc))
@@ -466,6 +494,17 @@ fun SettingsScreen(
       current = avPack,
       onPick = { avPack = it; prefs.avPack = it; cableDialog = false },
       onDismiss = { cableDialog = false },
+    )
+  }
+  if (autosaveDialog) {
+    ChoiceDialog(
+      title = stringResource(R.string.settings_autosave),
+      options = listOf(0, 5, 10, 20).map {
+        it to if (it == 0) stringResource(R.string.settings_autosave_off) else stringResource(R.string.settings_autosave_every, it)
+      },
+      current = autosaveMinutes,
+      onPick = { autosaveMinutes = it; prefs.autosaveMinutes = it; autosaveDialog = false },
+      onDismiss = { autosaveDialog = false },
     )
   }
   if (aspectDialog) {

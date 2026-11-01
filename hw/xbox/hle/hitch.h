@@ -107,6 +107,10 @@ enum { HLE_FR_SWAP, HLE_FR_WRITE, HLE_FR_READY, HLE_FR_FRONT, HLE_FR_SHOWN, HLE_
 void hle_hitch_frame(uint32_t id, int stage);
 /* the GPU timeline advanced (render / timeline thread) */
 void hle_hitch_gpu_done(void);
+/* For the app's hang recovery and autosaves: how long the open frame window
+ * has run when it is a hang now (ms, 0: none), and the time since the last
+ * hang ended (ms, -1: none yet). */
+void hle_hitch_status(double *hang_ms, double *since_hang_ms);
 /* overlay text (lines separated by '\n'); false = nothing to show */
 bool hle_hitch_overlay(char *buf, size_t n);
 

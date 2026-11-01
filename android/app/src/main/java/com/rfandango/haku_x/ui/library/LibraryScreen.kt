@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -286,6 +287,8 @@ private fun GameList(
   var menuFor by remember { mutableStateOf<Uri?>(null) }
   // The game whose savestates are listed (the menu's Load state), with its store.
   var statesFor by remember { mutableStateOf<Pair<Game, SaveStateStore>?>(null) }
+  // The game whose disc image is being checked (the menu's Check disc).
+  var checkFor by remember { mutableStateOf<Game?>(null) }
   val context = LocalContext.current
   val haptics = LocalHapticFeedback.current
   // One column in portrait, two side by side in landscape.
@@ -380,6 +383,14 @@ private fun GameList(
                 },
               )
             }
+            DropdownMenuItem(
+              text = { Text(stringResource(R.string.library_menu_check_disc)) },
+              leadingIcon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
+              onClick = {
+                menuFor = null
+                checkFor = game
+              },
+            )
             // A full dump (the video partition first) can become an XISO.
             if (disc?.isFullDump == true) {
               DropdownMenuItem(
@@ -396,6 +407,7 @@ private fun GameList(
       }
     }
   }
+  checkFor?.let { game -> DiscCheckDialog(game, onDismiss = { checkFor = null }) }
   statesFor?.let { (game, store) ->
     LoadStatesDialog(
       title = game.title,

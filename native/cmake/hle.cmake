@@ -33,6 +33,7 @@ set(NC_VSH "${NC_DEPS}/root/subprojects/nv2a_vsh_cpu/src")
 add_library(hakux_hle STATIC
   ${NC_HLE}/hle.c
   ${NC_HLE}/hitch.c
+  ${NC_HLE}/cpuplace.c
   ${NC_HLE}/core/title.c
   ${NC_HLE}/core/probe.c
   ${NC_HLE}/core/xbe_guest.c

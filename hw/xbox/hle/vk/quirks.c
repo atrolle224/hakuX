@@ -122,14 +122,15 @@ static bool mali_g52_arm(const HleDriver *d)
  * the queue's lock for 3-6 ms while it waits; the Mali-G52's (Arm's r34p0,
  * Vulkan 1.1, 2026-10-30) returns at once, so the wait only cost there: the
  * presenter spent 620-730 ms/s waiting for its passes, without it 0.3 ms/s,
- * the picture the same (Sega GT 2002, Beyond Good & Evil). Off on the
- * Mali-G615 under Arm's driver too, untested here: ARMSX2 measured its
- * r44p1 (Anbernic RG 477V) stalling for seconds in a present that spins on
- * the GPU and turned that off (GSDeviceVK.cpp). +present_cpu_wait puts it
- * back. Arm's other GPUs and releases keep it. */
+ * the picture the same (Sega GT 2002, Beyond Good & Evil). The Mali-G615
+ * keeps it: an earlier build turned it off there on ARMSX2's report of
+ * r44p1 stalling in a present spin, but that was PCSX2's GPU spin (its
+ * timestamp queries, which hakuX doesn't use), not this wait, and with the
+ * wait off a present that waits on the GPU holds the queue's lock the way
+ * Qualcomm's does. -present_cpu_wait turns it off to compare. */
 static bool not_turnip_not_g52_arm(const HleDriver *d)
 {
-    return !mesa_turnip(d) && !mali_g52_arm(d) && !mali_g615_blob(d);
+    return !mesa_turnip(d) && !mali_g52_arm(d);
 }
 
 /* Timestamp queries that never resolve: ARMSX2's Mali-G615, and the G52's

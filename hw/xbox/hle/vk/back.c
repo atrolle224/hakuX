@@ -21,6 +21,7 @@
 #include "hw/xbox/hle/vk/pcache.h"
 #include "hw/xbox/hle/vk/pipeasync.h"
 #include "hw/xbox/hle/hitch.h"
+#include "hw/xbox/hle/cpuplace.h"
 #include "hw/xbox/hle/prof.h"
 #include "hw/xbox/hle/vk/display.h"
 #include "hw/xbox/hle/vk/guest_ram.h"
@@ -2594,6 +2595,7 @@ static void *render_thread(void *opaque)
 {
     HleRing *r = hle_fe_ring();
     hle_hitch_thread(HLE_HT_RENDER);
+    hle_cpu_thread(HLE_CPU_RENDER);     /* the fast cores (cpuplace.h) */
     for (;;) {
         hle_event_reset(&g_back.kick);
         const HleCmdHdr *h;

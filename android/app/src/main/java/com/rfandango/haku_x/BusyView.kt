@@ -41,7 +41,7 @@ class BusyView(context: Context, line: String) {
  */
 class LoadingDialog(activity: Activity, state: String) {
   /** "Loading slot n…" */
-  val line: String = SaveStateStore.slotOf(state)?.let { activity.getString(R.string.state_loading, it) }
+  val line: String = SaveStateStore.slotOf(state)?.takeIf { !SaveStateStore.isAuto(it) }?.let { activity.getString(R.string.state_loading, it) }
     ?: activity.getString(R.string.state_loading_any)
 
   private val busy = BusyView(activity, line)

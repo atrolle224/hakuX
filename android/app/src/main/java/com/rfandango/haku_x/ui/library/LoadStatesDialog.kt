@@ -80,7 +80,7 @@ fun LoadStatesDialog(
             ) {
               Thumbnail(store, slot)
               Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(stringResource(R.string.state_slot, slot), style = MaterialTheme.typography.titleSmall)
+                Text(if (SaveStateStore.isAuto(slot)) stringResource(R.string.state_autosave) else stringResource(R.string.state_slot, slot), style = MaterialTheme.typography.titleSmall)
                 Text(
                   format.format(Date(store.state(slot).lastModified())),
                   style = MaterialTheme.typography.bodySmall,

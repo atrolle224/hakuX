@@ -26,8 +26,16 @@ class SaveStateStore(context: Context, gameKey: String, discUri: String? = null)
   fun state(slot: Int) = File(dir, "slot$slot.hxs")
   fun thumb(slot: Int) = File(dir, "slot$slot.jpg")
 
-  /** The slots holding a state. */
-  fun saved(): List<Int> = (1..SLOTS).filter { state(it).isFile }
+  /** The slots holding a state: the autosaves (newest first), then the ten. */
+  fun saved(): List<Int> =
+    AUTO_SLOTS.filter { state(it).isFile }.sortedByDescending { state(it).lastModified() } +
+      (1..SLOTS).filter { state(it).isFile }
+
+  /** The newest state of any slot, or null. */
+  fun newest(): Int? = saved().maxByOrNull { state(it).lastModified() }
+
+  /** The autosave slot to write next: an empty one, else the older. */
+  fun nextAutoSlot(): Int = AUTO_SLOTS.firstOrNull { !state(it).isFile } ?: AUTO_SLOTS.minBy { state(it).lastModified() }
 
   /** Where a slot's files go (made on first use). */
   fun prepare() {
@@ -64,6 +72,10 @@ class SaveStateStore(context: Context, gameKey: String, discUri: String? = null)
 
   companion object {
     const val SLOTS = 10
+    /** Automatic savestates (NativeCoreActivity), two in turn so a bad one leaves the other. */
+    val AUTO_SLOTS = listOf(11, 12)
+
+    fun isAuto(slot: Int) = slot in AUTO_SLOTS
     private const val TAG = "hakuX-library"
 
     /** The slot a state file is (state's slot<N>.hxs), or null. */

@@ -11,6 +11,7 @@
 #include <time.h>
 #include "hw/xbox/hle/hle.h"
 #include "hw/xbox/hle/hitch.h"
+#include "hw/xbox/hle/cpuplace.h"
 #include "hw/xbox/hle/host.h"
 #include "hw/xbox/hle/pb/pbdraw.h"
 #include "hw/xbox/hle/vk/back.h"
@@ -519,6 +520,7 @@ static void window(uint32_t id);
 
 void hle_hitch_pb_swap(uint32_t id)
 {
+    hle_cpu_frame();                    /* the frame's work for Android's hints (cpuplace.h) */
     start();
     window(id);
 }
@@ -796,6 +798,28 @@ static void ago(char *b, size_t n, int64_t us)
     } else {
         snprintf(b, n, "%lldh%02lldm", (long long)(s / 3600), (long long)(s / 60 % 60));
     }
+}
+
+void hle_hitch_status(double *hang_ms, double *since_hang_ms)
+{
+    *hang_ms = 0;
+    *since_hang_ms = -1;
+    if (!g_hitch_on) {
+        return;
+    }
+    hle_mutex_lock(&g_h.mx);
+    if (g_h.have_win && !g_h.paused) {
+        double el = t2ms(hle_prof_now() - g_h.win.t);
+        if (el >= g_h.hang_ms) {
+            *hang_ms = el;
+        }
+    }
+    if (g_h.last_hang.valid) {
+        double end_us = (double)g_h.last_hang.start_us + g_h.last_hang.ms * 1000.0;
+        double since = ((double)g_get_monotonic_time() - end_us) / 1000.0;
+        *since_hang_ms = since > 0 ? since : 0;
+    }
+    hle_mutex_unlock(&g_h.mx);
 }
 
 bool hle_hitch_overlay(char *buf, size_t n)

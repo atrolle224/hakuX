@@ -103,6 +103,40 @@ class SaveStates(
     }.start()
   }
 
+  /** The newest state of any slot (the hang prompt's), or null. */
+  fun newest(): Int? = store.newest()
+
+  /**
+   * An automatic savestate into the next autosave slot (the older of the
+   * two), without dialogs: the game stands still while it's written, as for
+   * Save state. done(true) once saved and its frame kept, false if it failed.
+   */
+  fun autosave(done: (Boolean) -> Unit) {
+    store.prepare()
+    val slot = store.nextAutoSlot()
+    val file = store.state(slot)
+    Thread {
+      /* the core writes beside the file and renames it over (native/state): a failed save leaves the old one */
+      val err = NativeCoreActivity.nativeSaveState(file.absolutePath)
+      val ok = err == null && file.isFile
+      activity.runOnUiThread {
+        if (!ok) {
+          android.util.Log.w("hakuX-autosave", "autosave failed: ${err ?: "not written"}")
+          done(false)
+          return@runOnUiThread
+        }
+        captureFrame { frame ->
+          Thread {
+            if (frame != null) {
+              runCatching { store.thumb(slot).outputStream().use { frame.compress(Bitmap.CompressFormat.JPEG, 85, it) } }
+            }
+            activity.runOnUiThread { done(true) }
+          }.start()
+        }
+      }
+    }.start()
+  }
+
   fun load(slot: Int) {
     val file = store.state(slot)
     Thread {
@@ -172,7 +206,7 @@ class SaveStates(
         layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         setPadding(dp(16), 0, 0, 0)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-        text = activity.getString(R.string.state_slot, slot) + "\n" +
+        text = (if (SaveStateStore.isAuto(slot)) activity.getString(R.string.state_autosave) else activity.getString(R.string.state_slot, slot)) + "\n" +
           if (file.exists()) format.format(Date(file.lastModified())) else activity.getString(R.string.state_empty)
       }
       row.addView(image)

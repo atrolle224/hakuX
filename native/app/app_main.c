@@ -330,6 +330,7 @@ EXPORT JNIEXPORT jint JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
  * (as the xemu-based app shows it): counts, the ongoing or last hang, the
  * last stutter; "" with nothing to show. */
 bool hle_hitch_overlay(char *buf, size_t n);
+void hle_hitch_status(double *hang_ms, double *since_hang_ms);
 
 EXPORT JNIEXPORT jstring JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeGetHleHitches(JNIEnv *env,
                                                                                               jclass cls)
@@ -339,6 +340,22 @@ EXPORT JNIEXPORT jstring JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_n
         buf[0] = 0;
     }
     return (*env)->NewStringUTF(env, buf);
+}
+
+/* NativeCoreActivity's hang recovery and autosaves: {seconds the game has
+ * been stuck on one frame (0: it isn't), seconds since its last hang ended
+ * (-1: none)} (hw/xbox/hle/hitch.h). */
+EXPORT JNIEXPORT jfloatArray JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeGetHangStatus(JNIEnv *env,
+                                                                                               jclass cls)
+{
+    double hang = 0, since = -1;
+    hle_hitch_status(&hang, &since);
+    jfloat v[2] = { (jfloat)(hang / 1000.0), (jfloat)(since < 0 ? -1.0 : since / 1000.0) };
+    jfloatArray a = (*env)->NewFloatArray(env, 2);
+    if (a) {
+        (*env)->SetFloatArrayRegion(env, a, 0, 2, v);
+    }
+    return a;
 }
 
 /* The window's overlays and the game's GPU work (NativeCoreActivity's
@@ -581,6 +598,11 @@ EXPORT int SDL_main(int argc, char *argv[])
         }
         if (!strncmp(argv[i], "dxtworkers=", 11)) {
             setenv("HAKUX_DXT_WORKERS", argv[i] + 11, 1);
+        }
+        /* bigcores=0: the busy threads not kept on the fast cores, no
+         * performance hints (hw/xbox/hle/cpuplace.c) */
+        if (!strncmp(argv[i], "bigcores=", 9)) {
+            setenv("HAKUX_BIGCORES", argv[i] + 9, 1);
         }
         if (!strncmp(argv[i], "upscale=", 8)) {
             nc_present_set_upscale(!strcmp(argv[i] + 8, "sgsr") ? NC_UPSCALE_SGSR : NC_UPSCALE_BILINEAR);

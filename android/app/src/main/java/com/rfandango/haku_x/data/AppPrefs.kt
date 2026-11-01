@@ -109,8 +109,8 @@ class AppPrefs(context: Context) {
 
   /** No CPU wait for the frame before presenting it (quirk present_cpu_wait off). */
   var maliNoPresentWait: Boolean
-    get() = sp.getBoolean("mali_no_present_wait", true)
-    set(value) = sp.edit { putBoolean("mali_no_present_wait", value) }
+    get() = sp.getBoolean("mali_no_present_wait_v2", false)
+    set(value) = sp.edit { putBoolean("mali_no_present_wait_v2", value) }
 
   /** Readback through coherent memory (quirk land_coherent). */
   var maliCoherentReadback: Boolean
@@ -121,6 +121,22 @@ class AppPrefs(context: Context) {
   var maliNoWbuf: Boolean
     get() = sp.getBoolean("mali_no_wbuf", false)
     set(value) = sp.edit { putBoolean("mali_no_wbuf", value) }
+
+  // Stability (this fork's build)
+  /** The guest CPU, decoder and render threads kept on the fast cores, with Android performance hints (bigcores). */
+  var fastCores: Boolean
+    get() = sp.getBoolean("fast_cores", true)
+    set(value) = sp.edit { putBoolean("fast_cores", value) }
+
+  /** Minutes between automatic savestates while a game runs (0: off). */
+  var autosaveMinutes: Int
+    get() = sp.getInt("autosave_minutes", 10)
+    set(value) = sp.edit { putInt("autosave_minutes", value) }
+
+  /** After a game is stuck on one frame for a while: offer to load the latest savestate or quit. */
+  var hangRecovery: Boolean
+    get() = sp.getBoolean("hang_recovery", true)
+    set(value) = sp.edit { putBoolean("hang_recovery", value) }
 
   /** FXAA over each frame before it's scaled to the screen (read at game start). */
   var fxaa: Boolean

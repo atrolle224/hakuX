@@ -44,6 +44,14 @@ android {
   }
 
   signingConfigs {
+    // This fork's test builds: one fixed key in the repository, so each new
+    // CI build installs over the last (the default debug key is new on every runner).
+    create("fork") {
+      storeFile = file("fork-debug.keystore")
+      storePassword = "android"
+      keyAlias = "fork"
+      keyPassword = "android"
+    }
     if (hasReleaseKeystore) {
       create("release") {
         storeFile = file(keystoreProperties.getProperty("storeFile"))
@@ -57,6 +65,7 @@ android {
   buildTypes {
     debug {
       applicationIdSuffix = ".debug"
+      signingConfig = signingConfigs.getByName("fork")
       resValue("string", "app_name", "hakuX Mali")
       ndk {
         debugSymbolLevel = "NONE"
