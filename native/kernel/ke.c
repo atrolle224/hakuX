@@ -931,6 +931,50 @@ static uint64_t NtWaitForMultipleObjectsEx(NcKernel *k, NcFrame *f, const uint32
     return wait(k, objs, n, a[2] == WAIT_ALL, a[5], 0, a[4] & 0xff);
 }
 
+/* Starvation relief (KeDelayExecutionThread): a Sleep(0) spin this long with
+ * a lower-priority thread ready sleeps the spinner this long. */
+#define STARVE_SPIN_NS 2000000ull
+#define STARVE_SLEEP_NS 500000ull
+
+/* A thread ready to run below cur's priority (not suspended), or NULL. */
+static const NcThread *lower_ready(NcKernel *k, const NcThread *cur)
+{
+    const NcThread *best = NULL;
+    for (unsigned i = 0; i < k->threads_hi; i++) {
+        const NcThread *t = &k->threads[i];
+        if (t != cur && t->state == NC_T_READY && !t->suspend && t->priority < cur->priority &&
+            (!best || t->priority > best->priority)) {
+            best = t;
+        }
+    }
+    return best;
+}
+
+/* The running thread (in a delay) waits STARVE_SLEEP_NS: the delay ends then,
+ * successfully (nc_ke_check_waits). */
+static void starve_sleep(NcKernel *k, NcThread *t, const NcThread *low, uint64_t now)
+{
+    static uint64_t s_logged_ns;
+    static unsigned s_count;
+    s_count++;
+    if (!s_logged_ns || now - s_logged_ns > 5000000000ull) {
+        nc_log("hakuX-native", "ke: thread %u (priority %d) spins in Sleep(0) with thread %u (priority %d) "
+               "ready below it: it sleeps %llu us so that one runs (%u times so far)",
+               t->id, t->priority, low->id, low->priority, (unsigned long long)(STARVE_SLEEP_NS / 1000), s_count);
+        s_logged_ns = now;
+    }
+    NcWait w;
+    memset(&w, 0, sizeof(w));
+    w.deadline_ns = now + STARVE_SLEEP_NS;
+    if (!k->wait_due_ns || w.deadline_ns < k->wait_due_ns) {
+        k->wait_due_ns = w.deadline_ns;
+        nc_kernel_clock_arm(k);
+    }
+    t->wait = w;
+    t->state = NC_T_WAITING;
+    k->resched = true;
+}
+
 /* KeDelayExecutionThread(WaitMode, Alertable, Interval) */
 static uint64_t KeDelayExecutionThread(NcKernel *k, NcFrame *f, const uint32_t *a)
 {
@@ -958,7 +1002,21 @@ static uint64_t KeDelayExecutionThread(NcKernel *k, NcFrame *f, const uint32_t *
         static uint64_t s_last_ns, s_spin_since;
         const uint64_t now = nc_ke_now_ns();
         const bool spinning = !k->resched && s_last == cur && now - s_last_ns < 20000;
+        const NcThread *low;
         if (!spinning) {
+            s_spin_since = now;
+        } else if (now - s_spin_since > STARVE_SPIN_NS && (low = lower_ready(k, cur)) != NULL) {
+            /* Starvation: the spin goes on while a lower-priority thread is
+             * ready, and Sleep(0) never gives it the CPU. NT does: the
+             * thread a SetEvent wakes gets a priority boost (EVENT_INCREMENT)
+             * up to the setter's, which this kernel doesn't keep, and a
+             * starved thread gets one from the balance set manager. Fable
+             * shuts its loader down that way at a load (SetEvent then
+             * Sleep(0), 150,000 times a second, its worker ready below it):
+             * it froze there, the loading screen up for good. Here the
+             * spinning thread sleeps STARVE_SLEEP_NS so the ready ones run,
+             * as a boost would have let them. */
+            starve_sleep(k, cur, low, now);
             s_spin_since = now;
         } else if (now - s_spin_since > 1000000) {
             nc_irq_idle_wait(0, 20000);
