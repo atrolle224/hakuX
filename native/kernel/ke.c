@@ -481,6 +481,58 @@ static void signaled(NcKernel *k)
     }
 }
 
+/* Starvation relief: a thread spinning this long in Sleep(0), a zero-timeout
+ * wait or a yield, with a thread ready below its priority, sleeps this long
+ * so the ready ones run. NT gets them the CPU with priority boosts (the
+ * thread a SetEvent wakes, starved threads), which this kernel doesn't keep. */
+#define STARVE_SPIN_NS 2000000ull
+#define STARVE_SLEEP_NS 500000ull
+
+/* A thread ready to run below cur's priority (not suspended), or NULL. */
+static const NcThread *lower_ready(NcKernel *k, const NcThread *cur)
+{
+    const NcThread *best = NULL;
+    for (unsigned i = 0; i < k->threads_hi; i++) {
+        const NcThread *t = &k->threads[i];
+        if (t != cur && t->state == NC_T_READY && !t->suspend && t->priority < cur->priority &&
+            (!best || t->priority > best->priority)) {
+            best = t;
+        }
+    }
+    return best;
+}
+
+/* Logged at most every 5 s: who spins, how, and who was starved. */
+static void starve_log(const NcThread *t, const NcThread *low, const char *how, uint64_t now)
+{
+    static uint64_t s_logged_ns;
+    static unsigned s_count;
+    s_count++;
+    if (!s_logged_ns || now - s_logged_ns > 5000000000ull) {
+        nc_log("hakuX-native", "ke: thread %u (priority %d) spins in %s with thread %u (priority %d) "
+               "ready below it: it sleeps %llu us so that one runs (%u times so far)",
+               t->id, t->priority, how, low->id, low->priority, (unsigned long long)(STARVE_SLEEP_NS / 1000), s_count);
+        s_logged_ns = now;
+    }
+}
+
+/* The running thread (in a delay or a yield) waits STARVE_SLEEP_NS: it ends
+ * then, successfully (nc_ke_check_waits). */
+static void starve_sleep(NcKernel *k, NcThread *t, const NcThread *low, const char *how, uint64_t now)
+{
+    starve_log(t, low, how, now);
+    NcWait w;
+    memset(&w, 0, sizeof(w));
+    w.deadline_ns = now + STARVE_SLEEP_NS;
+    if (!k->wait_due_ns || w.deadline_ns < k->wait_due_ns) {
+        k->wait_due_ns = w.deadline_ns;
+        nc_kernel_clock_arm(k);
+    }
+    t->wait = w;
+    t->state = NC_T_WAITING;
+    k->resched = true;
+}
+
 /* A poll (a zero timeout) found nothing signaled. One poll is NT's: the
  * thread keeps the CPU. A thread polling back to back (Bink's scheduler in
  * Halo, Panzer Dragoon Orta's loader: a million and a half polls a second,
@@ -488,7 +540,7 @@ static void signaled(NcKernel *k)
  * its priority or above, as if it had slept, and the thread it waits for
  * runs sooner. With nothing else to run, after a millisecond it waits for
  * the next interrupt on the host, 20 us at a time. */
-static void poll_spin(NcKernel *k)
+static const NcThread *poll_spin(NcKernel *k)
 {
     const NcThread *cur = k->current;
     static const NcThread *s_last;
@@ -508,12 +560,20 @@ static void poll_spin(NcKernel *k)
                 break;
             }
         }
+        const NcThread *low;
+        if (!k->resched && now - s_spin_since > STARVE_SPIN_NS && (low = lower_ready(k, cur)) != NULL) {
+            /* starved below it: the caller turns the poll into a short wait */
+            s_spin_since = now;
+            s_last_ns = nc_ke_now_ns();
+            return low;
+        }
         if (!k->resched && now - s_spin_since > 1000000) {
             nc_irq_idle_wait(0, 20000);
             nc_ke_update_time(k);
         }
     }
     s_last_ns = nc_ke_now_ns();
+    return NULL;
 }
 
 /* Waits on objects with an NT timeout (PLARGE_INTEGER in 100 ns: NULL forever,
@@ -554,10 +614,18 @@ static uint32_t wait(NcKernel *k, const uint32_t *objs, unsigned count, bool wai
     } else if (timeout_va) {
         int64_t rel_100ns = to < 0 ? -to : to - (int64_t)nc_ke_system_time();
         if (rel_100ns <= 0) {
+            const NcThread *low = NULL;
             if (count && t && t->state == NC_T_RUNNING && !k->redirected) {
-                poll_spin(k);
+                low = poll_spin(k);
             }
-            return count ? NC_STATUS_TIMEOUT : NC_STATUS_SUCCESS;
+            if (!low) {
+                return count ? NC_STATUS_TIMEOUT : NC_STATUS_SUCCESS;
+            }
+            /* a poll spin starving a ready thread below it: this poll waits
+             * on its objects for STARVE_SLEEP_NS instead (it ends as soon as
+             * one is signaled, else times out as the poll would have) */
+            starve_log(t, low, "a zero-timeout wait", nc_ke_now_ns());
+            rel_100ns = (int64_t)(STARVE_SLEEP_NS / 100);
         }
         w.deadline_ns = nc_ke_now_ns() + (uint64_t)rel_100ns * 100u;
         if (!k->wait_due_ns || w.deadline_ns < k->wait_due_ns) {
@@ -931,50 +999,6 @@ static uint64_t NtWaitForMultipleObjectsEx(NcKernel *k, NcFrame *f, const uint32
     return wait(k, objs, n, a[2] == WAIT_ALL, a[5], 0, a[4] & 0xff);
 }
 
-/* Starvation relief (KeDelayExecutionThread): a Sleep(0) spin this long with
- * a lower-priority thread ready sleeps the spinner this long. */
-#define STARVE_SPIN_NS 2000000ull
-#define STARVE_SLEEP_NS 500000ull
-
-/* A thread ready to run below cur's priority (not suspended), or NULL. */
-static const NcThread *lower_ready(NcKernel *k, const NcThread *cur)
-{
-    const NcThread *best = NULL;
-    for (unsigned i = 0; i < k->threads_hi; i++) {
-        const NcThread *t = &k->threads[i];
-        if (t != cur && t->state == NC_T_READY && !t->suspend && t->priority < cur->priority &&
-            (!best || t->priority > best->priority)) {
-            best = t;
-        }
-    }
-    return best;
-}
-
-/* The running thread (in a delay) waits STARVE_SLEEP_NS: the delay ends then,
- * successfully (nc_ke_check_waits). */
-static void starve_sleep(NcKernel *k, NcThread *t, const NcThread *low, uint64_t now)
-{
-    static uint64_t s_logged_ns;
-    static unsigned s_count;
-    s_count++;
-    if (!s_logged_ns || now - s_logged_ns > 5000000000ull) {
-        nc_log("hakuX-native", "ke: thread %u (priority %d) spins in Sleep(0) with thread %u (priority %d) "
-               "ready below it: it sleeps %llu us so that one runs (%u times so far)",
-               t->id, t->priority, low->id, low->priority, (unsigned long long)(STARVE_SLEEP_NS / 1000), s_count);
-        s_logged_ns = now;
-    }
-    NcWait w;
-    memset(&w, 0, sizeof(w));
-    w.deadline_ns = now + STARVE_SLEEP_NS;
-    if (!k->wait_due_ns || w.deadline_ns < k->wait_due_ns) {
-        k->wait_due_ns = w.deadline_ns;
-        nc_kernel_clock_arm(k);
-    }
-    t->wait = w;
-    t->state = NC_T_WAITING;
-    k->resched = true;
-}
-
 /* KeDelayExecutionThread(WaitMode, Alertable, Interval) */
 static uint64_t KeDelayExecutionThread(NcKernel *k, NcFrame *f, const uint32_t *a)
 {
@@ -1016,7 +1040,7 @@ static uint64_t KeDelayExecutionThread(NcKernel *k, NcFrame *f, const uint32_t *
              * it froze there, the loading screen up for good. Here the
              * spinning thread sleeps STARVE_SLEEP_NS so the ready ones run,
              * as a boost would have let them. */
-            starve_sleep(k, cur, low, now);
+            starve_sleep(k, cur, low, "Sleep(0)", now);
             s_spin_since = now;
         } else if (now - s_spin_since > 1000000) {
             nc_irq_idle_wait(0, 20000);
@@ -1040,6 +1064,26 @@ static uint64_t KeDelayExecutionThread(NcKernel *k, NcFrame *f, const uint32_t *
 /* NtYieldExecution() */
 static uint64_t NtYieldExecution(NcKernel *k, NcFrame *f, const uint32_t *a)
 {
+    /* a yield loop that goes on with a thread ready below it: that one runs
+     * (starvation relief, as in KeDelayExecutionThread) */
+    NcThread *cur = k->current;
+    if (cur && cur->state == NC_T_RUNNING && !k->redirected) {
+        static const NcThread *s_last;
+        static uint64_t s_last_ns, s_spin_since;
+        const uint64_t now = nc_ke_now_ns();
+        const NcThread *low;
+        if (s_last != cur || now - s_last_ns > 20000) {
+            s_spin_since = now;
+        } else if (now - s_spin_since > STARVE_SPIN_NS && (low = lower_ready(k, cur)) != NULL) {
+            s_last = cur;
+            s_last_ns = now;
+            s_spin_since = now;
+            starve_sleep(k, cur, low, "NtYieldExecution", now);
+            return NC_STATUS_SUCCESS;
+        }
+        s_last = cur;
+        s_last_ns = now;
+    }
     nc_ps_yield(k);         /* behind the ready threads of its priority */
     return NC_STATUS_SUCCESS;
 }
