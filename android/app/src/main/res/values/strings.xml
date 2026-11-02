@@ -577,6 +577,8 @@
   <string name="settings_mali_threads_desc">Large textures are unpacked on several CPU cores at once, for less stutter when a game loads them.</string>
   <string name="settings_mali_present">Skip the present wait</string>
   <string name="settings_mali_present_desc">Hands each frame to the screen without the CPU waiting for the GPU first. Off by default again: with it on, a present can wait on the GPU while holding the queue, which can stall the picture. Turn it on only to compare.</string>
+  <string name="controllers_share_p1">Every controller plays as player 1</string>
+  <string name="controllers_share_p1_desc">The handheld\'s own controls and any connected controller all control player 1 at the same time. A controller chosen for player 2, 3 or 4 below still plays as that player. Turn off for multiplayer with automatic player numbers.</string>
   <string name="settings_section_stability">Stability</string>
   <string name="settings_fast_cores">Keep the emulator on the fast cores</string>
   <string name="settings_fast_cores_desc">The Xbox CPU, GPU decoder and render threads stay on the phone\'s big CPU cores, and Android is told how long each frame takes so it raises their clocks before a frame runs late. Fewer dropped frames on big.LITTLE chips (the RG477M\'s); its temperature limits still apply.</string>

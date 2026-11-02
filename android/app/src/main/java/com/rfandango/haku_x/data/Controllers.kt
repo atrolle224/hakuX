@@ -298,6 +298,13 @@ object Controllers {
     val slots: List<PlayerSlot> = List(PLAYERS) { PlayerSlot() },
     val profiles: Map<String, PadProfile> = emptyMap(),
     val names: Map<String, String> = emptyMap(),
+    /**
+     * All controllers play as player 1 together (this fork's default): a
+     * handheld's own controls and a connected controller both work at once,
+     * their inputs combined. A controller chosen for another player still
+     * plays as that one.
+     */
+    val shareP1: Boolean = true,
   ) {
     /** A controller's mapping: its own, else its model's, else the defaults. */
     fun profileFor(d: InputDevice): PadProfile =
@@ -324,6 +331,18 @@ object Controllers {
      * player.
      */
     fun assign(devices: List<InputDevice>): Map<Int, Int> {
+      if (shareP1) {
+        val out = mutableMapOf<Int, Int>()
+        val free = devices.toMutableList()
+        for ((p, slot) in slots.withIndex()) {
+          if (p == 0 || slot.mode != PlayerSlot.DEVICE) continue
+          val d = free.firstOrNull { unitKey(it) == slot.key } ?: continue
+          out[d.id] = p
+          free.remove(d)
+        }
+        if (slots[0].mode != PlayerSlot.OFF) for (d in free) out[d.id] = 0
+        return out
+      }
       val out = mutableMapOf<Int, Int>()
       val free = devices.toMutableList()
       for ((p, s) in slots.withIndex()) {
@@ -347,6 +366,7 @@ object Controllers {
       }))
       put("profiles", JSONObject().apply { for ((k, v) in profiles) put(k, v.toJson()) })
       put("names", JSONObject().apply { for ((k, v) in names) put(k, v) })
+      put("shareP1", shareP1)
     }
   }
 
@@ -364,7 +384,7 @@ object Controllers {
       val profiles = po.keys().asSequence().associateWith { PadProfile.fromJson(po.getJSONObject(it)) }
       val no = o.optJSONObject("names") ?: JSONObject()
       val names = no.keys().asSequence().associateWith { no.getString(it) }
-      Config(slots, profiles, names)
+      Config(slots, profiles, names, o.optBoolean("shareP1", true))
     } catch (_: Exception) {
       Config()
     }

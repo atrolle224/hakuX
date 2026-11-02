@@ -28,6 +28,7 @@ import com.rfandango.haku_x.ui.common.EmptyText
 import com.rfandango.haku_x.ui.common.Hint
 import com.rfandango.haku_x.ui.common.Section
 import com.rfandango.haku_x.ui.common.SubScreen
+import com.rfandango.haku_x.ui.common.SwitchItem
 
 /** The connected controllers, kept current while the screen shows. */
 @Composable
@@ -70,6 +71,12 @@ fun ControllersScreen(onBack: () -> Unit, onMap: (deviceId: Int) -> Unit) {
       val assigned = config.assign(devices)
       val byId = devices.associateBy { it.id }
       Section(stringResource(R.string.controllers_players))
+      SwitchItem(
+        title = stringResource(R.string.controllers_share_p1),
+        summary = stringResource(R.string.controllers_share_p1_desc),
+        checked = config.shareP1,
+        onChange = { update(config.copy(shareP1 = it)) },
+      )
       for (p in 0 until Controllers.PLAYERS) {
         val s = config.slots[p]
         val now = assigned.entries.firstOrNull { it.value == p }?.let { byId[it.key]?.name }

@@ -37,6 +37,7 @@ class PadRouter(
   var assignment: Map<Int, Int> = emptyMap()
     private set
   private val out = PadOut()
+  private val other = PadOut()
 
   /** The configuration again (the settings or the menu changed it). */
   fun reload() {
@@ -55,11 +56,42 @@ class PadRouter(
     for (p in 0 until Controllers.PLAYERS) {
       if (p !in assignment.values) send(p, PadOut())
     }
+    for (p in assignment.values.toSet()) sendPlayer(p)
+  }
+
+  /**
+   * A player's state: the one controller's, or with several playing as it
+   * (Config.shareP1) all of theirs combined: any button held, the furthest
+   * pressed trigger or face button, and each stick from the controller
+   * pushing it furthest.
+   */
+  private fun sendPlayer(player: Int) {
+    var first = true
     for ((id, p) in assignment) {
+      if (p != player) continue
       val st = states[id] ?: continue
       val d = InputDevice.getDevice(id) ?: continue
-      send(p, st.compute(profile(d), out))
+      if (first) {
+        out.lx = 0; out.ly = 0; out.rx = 0; out.ry = 0
+        st.compute(profile(d), out)
+        first = false
+        continue
+      }
+      other.lx = 0; other.ly = 0; other.rx = 0; other.ry = 0
+      val o = st.compute(profile(d), other)
+      out.buttons = out.buttons or o.buttons
+      for (i in out.analog.indices) out.analog[i] = maxOf(out.analog[i], o.analog[i])
+      if (o.lx.toLong() * o.lx + o.ly.toLong() * o.ly > out.lx.toLong() * out.lx + out.ly.toLong() * out.ly) {
+        out.lx = o.lx; out.ly = o.ly
+      }
+      if (o.rx.toLong() * o.rx + o.ry.toLong() * o.ry > out.rx.toLong() * out.rx + out.ry.toLong() * out.ry) {
+        out.rx = o.rx; out.ry = o.ry
+      }
     }
+    if (first) {
+      out.buttons = 0; out.analog.fill(0); out.lx = 0; out.ly = 0; out.rx = 0; out.ry = 0
+    }
+    send(player, out)
   }
 
   private fun profile(d: InputDevice) = profiles.getOrPut(d.id) { config.profileFor(d) }
@@ -81,7 +113,7 @@ class PadRouter(
     if (!bound && e.keyCode == KeyEvent.KEYCODE_BUTTON_MODE) return false     /* the menu's (the activity) */
     val st = states.getOrPut(d.id) { PadState() }
     if (st.onKey(e)) {
-      assignment[d.id]?.let { send(it, st.compute(p, out)) }
+      assignment[d.id]?.let { sendPlayer(it) }
     }
     return true
   }
@@ -93,7 +125,7 @@ class PadRouter(
     if (!Controllers.isGameController(d) || e.actionMasked != MotionEvent.ACTION_MOVE) return false
     val st = states.getOrPut(d.id) { PadState() }
     st.onMotion(e)
-    assignment[d.id]?.let { send(it, st.compute(profile(d), out)) }
+    assignment[d.id]?.let { sendPlayer(it) }
     return true
   }
 
