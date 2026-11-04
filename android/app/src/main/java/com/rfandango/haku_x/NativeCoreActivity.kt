@@ -527,6 +527,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     activityPaused = false
     syncPause() /* where it stopped (onPause), unless the menu is open */
     hideSystemBars()
+    matchRefreshRate()
     val prefs = getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE)
     fpsOn = prefs.getBoolean("show_fps", true)
     hitchesOn = BuildConfig.DEBUG && prefs.getBoolean(PREF_SHOW_HITCHES, true)
@@ -577,6 +578,23 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         it.hide(WindowInsets.Type.systemBars())
         it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
       }
+    }
+  }
+
+  /**
+   * The screen on a whole multiple of the game's 60 Hz, the highest the panel has at its
+   * resolution: a 90 Hz screen shows 60 fps frames for one and two refreshes in turn (judder).
+   */
+  private fun matchRefreshRate() {
+    @Suppress("DEPRECATION")
+    val disp = (if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay) ?: return
+    val cur = disp.mode
+    val best = disp.supportedModes
+      .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+      .filter { val m = it.refreshRate / 60f; m >= 0.98f && Math.abs(m - Math.round(m)) < 0.02f }
+      .maxByOrNull { it.refreshRate } ?: return
+    if (window.attributes.preferredDisplayModeId != best.modeId) {
+      window.attributes = window.attributes.apply { preferredDisplayModeId = best.modeId }
     }
   }
 
